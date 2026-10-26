@@ -115,6 +115,8 @@ protected:
     void closeEvent(QCloseEvent *event);
 
 private:
+    // Phase 1 switch: set false to retain the existing UI/preset parameters.
+    bool m_gamingProfileEnabled = true;
     Ui::Widget *ui;
     qsc::AdbProcess m_adb;
     QSystemTrayIcon *m_hideIcon;

@@ -202,6 +202,10 @@ source_group(groupcontroller FILES ${QC_GROUP_CONTROLLER})
 set(QC_UTIL_SOURCES
     util/config.h
     util/config.cpp
+    util/gamingprofile.h
+    util/gamingprofile.cpp
+    util/processpriority.h
+    util/processpriority.cpp
     util/mousetap/mousetap.h
     util/mousetap/mousetap.cpp
     util/singleinstance.h
@@ -317,6 +321,20 @@ message(STATUS "multi config:" QC_IS_MUTIL_CONFIG)
 # 3. 使用表达式生成器禁止multi config自动追加子目录解决方案 https://stackoverflow.com/questions/7747857/in-cmake-how-do-i-work-around-the-debug-and-release-directories-visual-studio-2
 set_target_properties(${PROJECT_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../output/${QC_CPU_ARCH}/${CMAKE_BUILD_TYPE}/$<0:>"
+)
+
+# Seed the editable runtime profile once; rebuilding preserves user edits.
+set(gaming_profile_seed [=[
+if(NOT EXISTS "$<TARGET_FILE_DIR:@PROJECT_NAME@>/gaming_profile.json")
+    file(COPY "@CMAKE_CURRENT_SOURCE_DIR@/../config/gaming_profile.json"
+         DESTINATION "$<TARGET_FILE_DIR:@PROJECT_NAME@>")
+endif()
+]=])
+string(CONFIGURE "${gaming_profile_seed}" gaming_profile_seed @ONLY)
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/seed-gaming-profile-$<CONFIG>.cmake"
+    CONTENT "${gaming_profile_seed}")
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -P "${CMAKE_CURRENT_BINARY_DIR}/seed-gaming-profile-$<CONFIG>.cmake"
 )
 
 #

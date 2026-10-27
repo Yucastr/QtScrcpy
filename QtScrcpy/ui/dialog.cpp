@@ -31,6 +31,8 @@
 #include <QUrl>
 
 #include "config.h"
+#include "gamingprofile.h"
+#include "processpriority.h"
 #include "dialog.h"
 #include "ui_dialog.h"
 #include "videoform.h"
@@ -927,21 +929,48 @@ void Dialog::on_startServerBtn_clicked()
         return;
     }
 
+    // Apply last so encoder presets cannot overwrite the gaming bitrate.
+    GamingProfile gamingProfile;
+    const bool gamingEnabled = m_gamingProfileEnabled;
+    if (gamingEnabled) {
+        QString error;
+        const QString path = QCoreApplication::applicationDirPath() + "/gaming_profile.json";
+        if (!gamingProfile.load(path, &error)) {
+            outLog(tr("Gaming profile: %1").arg(error));
+            return;
+        }
+        params.maxSize = gamingProfile.maxSize;
+        params.maxFps = gamingProfile.maxFps;
+        params.bitRate = gamingProfile.videoBitRate;
+        outLog(tr("Gaming profile: max_size=%1, max_fps=%2, video_bit_rate=%3")
+                   .arg(params.maxSize).arg(params.maxFps).arg(params.bitRate));
+    }
+    const auto connectDevice = [this, gamingEnabled, gamingProfile](const qsc::DeviceParams &effectiveParams) {
+        if (gamingEnabled) {
+            QString error;
+            if (!ProcessPriority::apply(gamingProfile.processPriority, &error)) {
+                // Priority is best-effort: keep the connection usable on failure.
+                outLog(tr("Gaming priority: %1").arg(error));
+            }
+        }
+        qsc::IDeviceManage::getInstance().connectDevice(effectiveParams);
+    };
+
     const bool needsVirtualDisplayCheck = !params.newDisplay.isEmpty();
     if (!camera && !needsVirtualDisplayCheck) {
-        qsc::IDeviceManage::getInstance().connectDevice(params);
+        connectDevice(params);
         return;
     }
 
     auto *versionAdb = new qsc::AdbProcess(this);
     connect(versionAdb, &qsc::AdbProcess::adbProcessResult, this,
-            [this, versionAdb, camera, params](qsc::AdbProcess::ADB_EXEC_RESULT result) {
+            [this, versionAdb, camera, params, connectDevice](qsc::AdbProcess::ADB_EXEC_RESULT result) {
         if (result == qsc::AdbProcess::AER_SUCCESS_EXEC) {
             bool ok = false;
             const int sdk = versionAdb->getStdOut().trimmed().toInt(&ok);
             const int minimumSdk = camera ? 31 : 29;
             if (ok && sdk >= minimumSdk) {
-                qsc::IDeviceManage::getInstance().connectDevice(params);
+                connectDevice(params);
             } else {
                 outLog(camera ? tr("camera preview requires Android 12 or later")
                               : tr("virtual display requires Android 10 or later"));
